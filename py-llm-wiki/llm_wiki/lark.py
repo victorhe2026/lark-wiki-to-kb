@@ -269,6 +269,7 @@ def ingest_lark_wiki(
     *,
     embedder=None,
     progress=None,
+    on_result=None,
 ) -> LarkIngestSummary:
     """Export a Lark wiki into the project's staging dir, then ingest it.
 
@@ -282,5 +283,6 @@ def ingest_lark_wiki(
     export = export_wiki(url_or_token, staging)
     if not export.docs:
         return LarkIngestSummary(export=export, results=[])
-    results = ingest_path(project, client, staging, embedder=embedder, progress=progress)
+    results = ingest_path(project, client, staging, embedder=embedder,
+                          progress=progress, on_result=on_result)
     return LarkIngestSummary(export=export, results=results)

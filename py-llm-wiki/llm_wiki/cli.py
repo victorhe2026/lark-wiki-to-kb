@@ -15,8 +15,9 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from .config import load_config
 from .store import WikiProject
@@ -68,6 +69,32 @@ def _make_embedder(project: WikiProject, client=None):
         return None
 
 
+# ── progress helpers ─────────────────────────────────────────────
+def _make_on_result(elapsed_buf: List[float]):
+    """Return an on_result callback that prints real-time speed + ETA."""
+    def on_result(r, idx: int, total: int) -> None:
+        if r.skipped:
+            print(f"  ⤳ [{idx}/{total}] {r.source} (cached, skipped)")
+            return
+        if not r.skipped:
+            elapsed_buf.append(r.elapsed_s)
+        avg = sum(elapsed_buf) / len(elapsed_buf) if elapsed_buf else 0
+        remaining = total - idx
+        eta_s = avg * remaining
+        eta_str = f"{int(eta_s // 60)}m{int(eta_s % 60):02d}s" if eta_s >= 60 else f"{eta_s:.0f}s"
+        if r.error:
+            _eprint(
+                f"  ✗ [{idx}/{total}] {r.source}: {r.error}"
+                f"  ({r.elapsed_s:.1f}s | avg {avg:.1f}s | ETA ~{eta_str})"
+            )
+        else:
+            print(
+                f"  ✓ [{idx}/{total}] {r.source}: {len(r.files_written)} pages"
+                f"  ({r.elapsed_s:.1f}s | avg {avg:.1f}s | ETA ~{eta_str})"
+            )
+    return on_result
+
+
 # ── commands ─────────────────────────────────────────────────────
 def cmd_init(args) -> int:
     project = _project(args.dir)
@@ -96,27 +123,25 @@ def cmd_ingest(args) -> int:
     from .ingest import ingest_path
 
     embedder = None if args.no_embed else _make_embedder(project, client)
+    elapsed_buf: List[float] = []
 
     def progress(src: Path):
-        print(f"  ingesting {src} ...")
+        print(f"  ingesting {src.name} ...", flush=True)
 
-    results = ingest_path(project, client, target, embedder=embedder, progress=progress)
+    t_start = time.monotonic()
+    results = ingest_path(project, client, target, embedder=embedder,
+                          progress=progress, on_result=_make_on_result(elapsed_buf))
     if not results:
         _eprint("No supported source files found (.txt/.md).")
         return 1
 
-    ok = skipped = failed = 0
-    for r in results:
-        if r.error:
-            failed += 1
-            _eprint(f"  ✗ {r.source}: {r.error}")
-        elif r.skipped:
-            skipped += 1
-            print(f"  ⤳ {r.source} (unchanged, skipped)")
-        else:
-            ok += 1
-            print(f"  ✓ {r.source}: {len(r.files_written)} pages, {r.reviews} reviews")
-    print(f"\nDone. {ok} ingested, {skipped} skipped, {failed} failed.")
+    ok = sum(1 for r in results if not r.error and not r.skipped)
+    skipped = sum(1 for r in results if r.skipped)
+    failed = sum(1 for r in results if r.error)
+    total_s = time.monotonic() - t_start
+    avg = sum(elapsed_buf) / len(elapsed_buf) if elapsed_buf else 0
+    print(f"\nDone. {ok} ingested, {skipped} skipped, {failed} failed."
+          f"  Total {total_s:.0f}s | avg {avg:.1f}s/doc")
     return 0 if failed == 0 else 1
 
 
@@ -145,13 +170,16 @@ def cmd_ingest_lark(args) -> int:
         return 2
 
     embedder = None if args.no_embed else _make_embedder(project, client)
+    elapsed_buf: List[float] = []
 
     def progress(src):
-        print(f"  ingesting {src} ...")
+        name = src if isinstance(src, str) else src.name
+        print(f"  ingesting {name} ...", flush=True)
 
     print(f"Fetching Lark wiki: {args.wiki} ...")
     try:
-        summary = ingest_lark_wiki(project, client, args.wiki, embedder=embedder, progress=progress)
+        summary = ingest_lark_wiki(project, client, args.wiki, embedder=embedder,
+                                   progress=progress, on_result=_make_on_result(elapsed_buf))
     except LarkError as exc:
         _eprint(f"error: {exc}")
         return 1
@@ -168,18 +196,12 @@ def cmd_ingest_lark(args) -> int:
         _eprint("No supported documents (doc/docx) found in this wiki.")
         return 1
 
-    ok = skipped = failed = 0
-    for r in summary.results:
-        if r.error:
-            failed += 1
-            _eprint(f"  ✗ {r.source}: {r.error}")
-        elif r.skipped:
-            skipped += 1
-            print(f"  ⤳ {r.source} (unchanged, skipped)")
-        else:
-            ok += 1
-            print(f"  ✓ {r.source}: {len(r.files_written)} pages, {r.reviews} reviews")
-    print(f"\nDone. {ok} ingested, {skipped} skipped, {failed} failed.")
+    ok = sum(1 for r in summary.results if not r.error and not r.skipped)
+    skipped = sum(1 for r in summary.results if r.skipped)
+    failed = sum(1 for r in summary.results if r.error)
+    avg = sum(elapsed_buf) / len(elapsed_buf) if elapsed_buf else 0
+    print(f"\nDone. {ok} ingested, {skipped} skipped, {failed} failed."
+          f"  Avg {avg:.1f}s/doc")
     print("View the knowledge graph with: llm-wiki gui")
     return 0 if failed == 0 else 1
 

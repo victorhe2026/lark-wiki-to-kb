@@ -7,6 +7,7 @@ pages into the vector store. Mirrors the pipeline in ``src/lib/ingest.ts``.
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
@@ -29,6 +30,7 @@ class IngestResult:
     files_written: List[str] = field(default_factory=list)
     reviews: int = 0
     error: Optional[str] = None
+    elapsed_s: float = 0.0
 
 
 def _embed_pages(project: WikiProject, embedder: Optional[Embedder], written: List[str]) -> None:
@@ -181,17 +183,27 @@ def ingest_path(
     *,
     embedder: Optional[Embedder] = None,
     progress=None,
+    on_result=None,
 ) -> List[IngestResult]:
-    """Ingest a file or (recursively) a folder of supported sources."""
+    """Ingest a file or (recursively) a folder of supported sources.
+
+    progress(src)                    — called before each file (for "ingesting …" line)
+    on_result(res, index, total)     — called after each file with result + position
+    """
     sources = discover_sources(target)
     if not sources:
         return []
     base_dir = target if target.is_dir() else target.parent
     cache = project.load_ingest_cache()
     results: List[IngestResult] = []
-    for src in sources:
+    total = len(sources)
+    for idx, src in enumerate(sources):
         if progress:
             progress(src)
+        t0 = time.monotonic()
         res = ingest_file(project, client, src, base_dir=base_dir, cache=cache, embedder=embedder)
+        res.elapsed_s = time.monotonic() - t0
         results.append(res)
+        if on_result:
+            on_result(res, idx + 1, total)
     return results
