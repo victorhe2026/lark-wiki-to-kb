@@ -190,9 +190,11 @@ def fetch_markdown(node: LarkNode) -> str:
     data = _run_lark(
         ["docs", "+fetch", "--api-version", "v2", "--doc", token, "--doc-format", "markdown"]
     )
-    content = data.get("content")
+    # lark-cli v2 response: data["document"]["content"] (Feishu XML/HTML)
+    # Older shapes expose content at the top level; support both.
+    doc = data.get("document") if isinstance(data.get("document"), dict) else {}
+    content = doc.get("content") or data.get("content")
     if not isinstance(content, str):
-        # Some payloads nest the rendered body; fall back to common keys.
         content = data.get("markdown") or data.get("text") or ""
     return content
 
