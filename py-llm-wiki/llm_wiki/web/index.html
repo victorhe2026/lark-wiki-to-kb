@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Wiki</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <div class="brand">LLM&nbsp;Wiki</div>
+    <div class="searchbar">
+      <input id="q" type="text" placeholder="Search or ask a question…" />
+      <button id="btn-search">Search</button>
+      <button id="btn-ask">Ask</button>
+    </div>
+    <div class="ingest">
+      <input id="ingest-path" type="text" placeholder="path to .md file or folder" />
+      <button id="btn-ingest">Ingest</button>
+    </div>
+    <div class="ingest">
+      <input id="lark-url" type="text" placeholder="Lark wiki URL or token…" />
+      <button id="btn-ingest-lark">From Lark</button>
+    </div>
+    <div id="status" class="status"></div>
+  </header>
+
+  <main>
+    <section id="graph-pane">
+      <canvas id="graph"></canvas>
+      <div id="legend" class="legend"></div>
+    </section>
+    <aside id="side">
+      <div id="results" class="panel hidden"></div>
+      <div id="answer" class="panel hidden"></div>
+      <article id="preview" class="panel">
+        <div class="placeholder">Click a node to preview its page.</div>
+      </article>
+    </aside>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

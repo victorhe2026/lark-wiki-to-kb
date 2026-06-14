@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-wiki"
+version = "0.1.0"
+description = "A minimal Python implementation of the LLM Wiki pattern: incrementally build and maintain a personal knowledge base with an LLM."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = [
+    "openai>=1.40",
+    "pyyaml>=6.0",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+gui = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "pywebview>=5.0",
+]
+local-embed = [
+    "fastembed>=0.3",
+]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+llm-wiki = "llm_wiki.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["llm_wiki*"]
+
+[tool.setuptools.package-data]
+llm_wiki = ["web/*.html", "web/*.js", "web/*.css"]
