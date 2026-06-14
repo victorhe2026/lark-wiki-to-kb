@@ -128,9 +128,13 @@ def cmd_ingest(args) -> int:
     def progress(src: Path):
         print(f"  ingesting {src.name} ...", flush=True)
 
+    max_new = getattr(args, "limit", None)
+    if max_new:
+        print(f"  (batch mode: up to {max_new} new docs this run)")
     t_start = time.monotonic()
     results = ingest_path(project, client, target, embedder=embedder,
-                          progress=progress, on_result=_make_on_result(elapsed_buf))
+                          progress=progress, on_result=_make_on_result(elapsed_buf),
+                          max_new=max_new)
     if not results:
         _eprint("No supported source files found (.txt/.md).")
         return 1
@@ -142,6 +146,8 @@ def cmd_ingest(args) -> int:
     avg = sum(elapsed_buf) / len(elapsed_buf) if elapsed_buf else 0
     print(f"\nDone. {ok} ingested, {skipped} skipped, {failed} failed."
           f"  Total {total_s:.0f}s | avg {avg:.1f}s/doc")
+    if max_new and (ok + failed) >= max_new:
+        print(f"Batch limit reached ({max_new}). Re-run to continue.")
     return 0 if failed == 0 else 1
 
 
@@ -176,10 +182,14 @@ def cmd_ingest_lark(args) -> int:
         name = src if isinstance(src, str) else src.name
         print(f"  ingesting {name} ...", flush=True)
 
+    max_new = getattr(args, "limit", None)
+    if max_new:
+        print(f"  (batch mode: up to {max_new} new docs this run)")
     print(f"Fetching Lark wiki: {args.wiki} ...")
     try:
         summary = ingest_lark_wiki(project, client, args.wiki, embedder=embedder,
-                                   progress=progress, on_result=_make_on_result(elapsed_buf))
+                                   progress=progress, on_result=_make_on_result(elapsed_buf),
+                                   max_new=max_new)
     except LarkError as exc:
         _eprint(f"error: {exc}")
         return 1
@@ -202,6 +212,8 @@ def cmd_ingest_lark(args) -> int:
     avg = sum(elapsed_buf) / len(elapsed_buf) if elapsed_buf else 0
     print(f"\nDone. {ok} ingested, {skipped} skipped, {failed} failed."
           f"  Avg {avg:.1f}s/doc")
+    if max_new and (ok + failed) >= max_new:
+        print(f"Batch limit reached ({max_new}). Re-run to continue.")
     print("View the knowledge graph with: llm-wiki gui")
     return 0 if failed == 0 else 1
 
@@ -363,6 +375,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("dir", nargs="?", help="project directory (default: .)")
     sp.add_argument("target", help="source file or folder to ingest")
     sp.add_argument("--no-embed", action="store_true", help="skip embedding generation")
+    sp.add_argument("--limit", type=int, default=None, metavar="N",
+                    help="stop after N non-cached docs (for batched runs; re-run to continue)")
     sp.set_defaults(func=cmd_ingest)
 
     sp = sub.add_parser("ingest-lark", help="import & ingest a Lark/Feishu wiki (via lark-cli)")
@@ -372,6 +386,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--no-init", action="store_true", help="don't auto-create the wiki if missing")
     sp.add_argument("--template", default="general", choices=list(TEMPLATES),
                     help="template used when auto-creating the wiki")
+    sp.add_argument("--limit", type=int, default=None, metavar="N",
+                    help="stop after N non-cached docs (for batched runs; re-run to continue)")
     sp.set_defaults(func=cmd_ingest_lark)
 
     sp = sub.add_parser("search", help="hybrid search over wiki pages")

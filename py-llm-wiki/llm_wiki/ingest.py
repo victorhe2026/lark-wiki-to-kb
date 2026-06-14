@@ -184,11 +184,13 @@ def ingest_path(
     embedder: Optional[Embedder] = None,
     progress=None,
     on_result=None,
+    max_new: Optional[int] = None,
 ) -> List[IngestResult]:
     """Ingest a file or (recursively) a folder of supported sources.
 
     progress(src)                    — called before each file (for "ingesting …" line)
     on_result(res, index, total)     — called after each file with result + position
+    max_new                          — stop after this many non-cached docs (for batched runs)
     """
     sources = discover_sources(target)
     if not sources:
@@ -197,6 +199,7 @@ def ingest_path(
     cache = project.load_ingest_cache()
     results: List[IngestResult] = []
     total = len(sources)
+    new_count = 0
     for idx, src in enumerate(sources):
         if progress:
             progress(src)
@@ -206,4 +209,8 @@ def ingest_path(
         results.append(res)
         if on_result:
             on_result(res, idx + 1, total)
+        if not res.skipped:
+            new_count += 1
+            if max_new is not None and new_count >= max_new:
+                break
     return results
